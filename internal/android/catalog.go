@@ -445,5 +445,46 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// ------------------------------------------------------------ recovery
+	c = append(c,
+		Command{
+			ID: "sideload", Category: CatRecovery, Mode: ModeADB, Label: "sideload <zip>",
+			DescKey: "d.sideload",
+			Args:    []Arg{file("zip")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("sideload", v["zip"])
+			},
+		},
+		Command{
+			ID: "sideload.session", Category: CatRecovery, Mode: ModeADB, Label: "sideload_session <zip>",
+			DescKey: "d.sideload.session",
+			Args:    []Arg{file("zip")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sideload_session", v["zip"])
+			},
+		},
+		Command{
+			ID: "recovery.roots", Category: CatRecovery, Mode: ModeADB,
+			Label: "su -c id / ls /", Root: true, DescKey: "d.recovery.roots",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "su", "-c", "id; echo; ls -la /")
+			},
+		},
+		Command{
+			ID: "recovery.wipe", Category: CatRecovery, Mode: ModeADB, Gate: GateUnlocked, Risk: true,
+			Label: "recovery --wipe_data", DescKey: "d.recovery.wipe",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "su", "-c", "recovery --wipe_data")
+			},
+		},
+		Command{
+			ID: "recovery.reboot", Category: CatRecovery, Mode: ModeADB,
+			Label: "su -c 'recovery --reboot'", Root: true, DescKey: "d.recovery.reboot",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "su", "-c", "recovery --reboot")
+			},
+		},
+	)
+
 	return c
 }
