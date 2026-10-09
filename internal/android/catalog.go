@@ -148,5 +148,75 @@ func sh(args ...string) []string {
 func AdbCommands() []Command {
 	var c []Command
 
+	// ---------------------------------------------------------------- info
+	c = append(c,
+		Command{
+			ID: "getprop", Category: CatInfo, Mode: ModeADB, Label: "getprop [key]",
+			DescKey: "d.getprop",
+			Args:    []Arg{choice("key", "property", "", shellCmds("ro.product.model", "ro.build.version.release", "ro.build.display.id", "ro.serialno", "ro.boot.slot_suffix", "ro.product.cpu.abi", "ro.build.type")...)},
+			Build: func(d Device, v map[string]string) []string {
+				if v["key"] == "" {
+					return d.ADB("shell", "getprop")
+				}
+				return d.ADB("shell", "getprop", v["key"])
+			},
+		},
+		Command{
+			ID: "info.summary", Category: CatInfo, Mode: ModeADB,
+			Label: "device summary", DescKey: "d.info.summary",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sh", "-c",
+					"echo model: $(getprop ro.product.model); echo device: $(getprop ro.product.device); echo android: $(getprop ro.build.version.release); echo build: $(getprop ro.build.display.id); echo abi: $(getprop ro.product.cpu.abi); echo slot: $(getprop ro.boot.slot_suffix); echo bootloader: $(getprop ro.boot.verifiedbootstate); echo sdk: $(getprop ro.build.version.sdk)")
+			},
+		},
+		Command{
+			ID: "info.battery", Category: CatInfo, Mode: ModeADB,
+			Label: "dumpsys battery", DescKey: "d.info.battery",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "dumpsys", "battery") },
+		},
+		Command{
+			ID: "info.meminfo", Category: CatInfo, Mode: ModeADB,
+			Label: "dumpsys meminfo", DescKey: "d.info.meminfo",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "dumpsys", "meminfo") },
+		},
+		Command{
+			ID: "info.df", Category: CatInfo, Mode: ModeADB,
+			Label: "shell df -h", DescKey: "d.info.df",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "df", "-h") },
+		},
+		Command{
+			ID: "info.cpu", Category: CatInfo, Mode: ModeADB,
+			Label: "shell cat /proc/cpuinfo", DescKey: "d.info.cpu",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "cat", "/proc/cpuinfo") },
+		},
+		Command{
+			ID: "info.kernel", Category: CatInfo, Mode: ModeADB,
+			Label: "shell uname -a", DescKey: "d.info.kernel",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "uname", "-a") },
+		},
+		Command{
+			ID: "info.uptime", Category: CatInfo, Mode: ModeADB,
+			Label: "shell uptime", DescKey: "d.info.uptime",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "uptime") },
+		},
+		Command{
+			ID: "info.display", Category: CatInfo, Mode: ModeADB,
+			Label: "wm size / wm density", DescKey: "d.info.display",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sh", "-c", "wm size; wm density")
+			},
+		},
+		Command{
+			ID: "info.ps", Category: CatInfo, Mode: ModeADB,
+			Label: "shell ps -A", DescKey: "d.info.ps",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "ps", "-A") },
+		},
+		Command{
+			ID: "info.features", Category: CatInfo, Mode: ModeADB,
+			Label: "shell pm list features", DescKey: "d.info.features",
+			Build: func(d Device, v map[string]string) []string { return d.ADB("shell", "pm", "list", "features") },
+		},
+	)
+
 	return c
 }
