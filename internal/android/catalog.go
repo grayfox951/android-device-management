@@ -636,5 +636,69 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// ------------------------------------------------------------- network
+	c = append(c,
+		Command{
+			ID: "net.tcpip", Category: CatNetwork, Mode: ModeADB, Label: "tcpip <port>",
+			DescKey: "d.net.tcpip",
+			Args:    []Arg{txt("port", "port", "5555")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("tcpip", v["port"])
+			},
+		},
+		Command{
+			ID: "net.forward", Category: CatNetwork, Mode: ModeADB, Label: "forward tcp:<local> tcp:<remote>",
+			DescKey: "d.net.forward",
+			Args:    []Arg{txt("local", "local", "tcp:8080"), txt("remote", "remote", "tcp:8080")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("forward", v["local"], v["remote"])
+			},
+		},
+		Command{
+			ID: "net.forward.list", Category: CatNetwork, Mode: ModeADB, Label: "forward --list",
+			DescKey: "d.net.forward.list",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("forward", "--list")
+			},
+		},
+		Command{
+			ID: "net.forward.kill", Category: CatNetwork, Mode: ModeADB, Label: "forward --remove <local>",
+			DescKey: "d.net.forward.kill",
+			Args:    []Arg{txt("local", "local", "tcp:8080")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("forward", "--remove", v["local"])
+			},
+		},
+		Command{
+			ID: "net.reverse", Category: CatNetwork, Mode: ModeADB, Label: "reverse tcp:<remote> tcp:<local>",
+			DescKey: "d.net.reverse",
+			Args:    []Arg{txt("remote", "device port", "tcp:3000"), txt("local", "host port", "tcp:3000")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("reverse", v["remote"], v["local"])
+			},
+		},
+		Command{
+			ID: "net.reverse.list", Category: CatNetwork, Mode: ModeADB, Label: "reverse --list",
+			DescKey: "d.net.reverse.list",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("reverse", "--list")
+			},
+		},
+		Command{
+			ID: "net.wifi.info", Category: CatNetwork, Mode: ModeADB, Label: "dumpsys wifi (head)",
+			DescKey: "d.net.wifi.info",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "dumpsys", "wifi")
+			},
+		},
+		Command{
+			ID: "net.ip", Category: CatNetwork, Mode: ModeADB, Label: "shell ip addr / ip route",
+			DescKey: "d.net.ip",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sh", "-c", "ip -brief addr 2>/dev/null || ip addr; echo; ip route")
+			},
+		},
+	)
+
 	return c
 }
