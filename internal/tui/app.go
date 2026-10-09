@@ -54,6 +54,16 @@ func RunSetup(lang string) (Model, error) {
 	return m, nil
 }
 
+// typing reports whether a text field currently owns the keyboard. Global keys
+// must stand aside, otherwise typing a host like 10.0.0.4 would trigger the
+// rescan shortcut and typing q would quit the program.
+func (m Model) typing() bool {
+	if m.tcpPrompt {
+		return true
+	}
+	return m.screen == screenArgs && m.ti.Focused()
+}
+
 // Init implements tea.Model.
 func (m *Model) Init() tea.Cmd {
 	switch m.screen {
@@ -75,7 +85,7 @@ func (m *Model) Init() tea.Cmd {
 // Update implements tea.Model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Global keys work everywhere except while typing in a field.
-	if m.screen != screenArgs || !m.ti.Focused() {
+	if !m.typing() {
 		if handled, cmd := m.globalKeys(msg); handled {
 			return m, cmd
 		}
@@ -131,7 +141,7 @@ func (m *Model) globalKeys(msg tea.Msg) (bool, tea.Cmd) {
 	}
 
 	// While a text field has focus every other key belongs to the field.
-	if m.screen == screenArgs && m.ti.Focused() {
+	if m.typing() {
 		return false, nil
 	}
 

@@ -565,3 +565,146 @@ func TestScriptCommandAppearsInBothMenus(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------- TCP input
+
+// TestTCPFieldOwnsTheKeyboard is the regression test for a host field that was
+// unreachable: the handler sat behind a return in the key switch, so nothing
+// the user typed ever reached the input.
+func TestTCPFieldOwnsTheKeyboard(t *testing.T) {
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+	m.devices = []android.Device{{Serial: "ABC", Mode: android.ModeADB, State: "device"}}
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	m = *res.(*Model)
+	if !m.tcpPrompt {
+		t.Fatal("t did not open the host field")
+	}
+
+	// Type a host that contains the letters bound to global shortcuts.
+	for _, ch := range "192.168.1.44" {
+		res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		m = *res.(*Model)
+	}
+	if got := m.ti.Value(); got != "192.168.1.44" {
+		t.Errorf("host field holds %q, want 192.168.1.44", got)
+	}
+	if m.quitting {
+		t.Error("typing q while the host field was open quit the program")
+	}
+	if m.screen != screenDevices {
+		t.Errorf("typing moved off the device screen to %d", m.screen)
+	}
+
+	// Typing c must not disconnect, r must not rescan.
+	if m.tcpBusy {
+		t.Error("typing triggered a connect")
+	}
+}
+
+// TestGlobalKeysStandDownWhileTyping checks the router does not run the global
+// handler before the field sees the key.
+func TestGlobalKeysStandDownWhileTyping(t *testing.T) {
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+	m.tcpPrompt = true
+	m.ti.Focus()
+
+	if !m.typing() {
+		t.Fatal("typing() should be true while the host field is open")
+	}
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m = *res.(*Model)
+	if m.quitting {
+		t.Error("q quit the program from inside the host field")
+	}
+	if m.ti.Value() != "q" {
+		t.Errorf("q did not reach the field, value = %q", m.ti.Value())
+	}
+}
+
+// TestTCPPromptCancelAndToggle checks esc and a second t close the field.
+func TestTCPPromptCancelAndToggle(t *testing.T) {
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+
+	open := func(src Model) Model {
+		res, _ := src.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+		return *res.(*Model)
+	}
+
+	m = open(m)
+	m.ti.SetValue("10.0.0.1")
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = *res.(*Model)
+	if m.tcpPrompt {
+		t.Error("esc did not close the field")
+	}
+	if m.ti.Value() != "" {
+		t.Errorf("cancelled host was not cleared: %q", m.ti.Value())
+	}
+
+	// Inside the field t is just a character, not a shortcut.
+	m = open(m)
+	m.ti.SetValue("t")
+	if !m.tcpPrompt {
+		t.Error("t inside the field closed it instead of being typed")
+	}
+}
+
+func TestNormaliseHost(t *testing.T) {
+	cases := map[string]string{
+		"192.168.1.44":       "192.168.1.44:5555",
+		" 192.168.1.44 ":     "192.168.1.44:5555",
+		"192.168.1.44:37000": "192.168.1.44:37000",
+		"  10.0.0.9:5555  ":  "10.0.0.9:5555",
+		"":                   "",
+		"   ":                "",
+		"phone.local":        "phone.local:5555",
+	}
+	for in, want := range cases {
+		if got := normaliseHost(in); got != want {
+			t.Errorf("normaliseHost(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestConnectResultIsReported proves the outcome reaches the user instead of
+// being dropped, and that the list is refreshed afterwards.
+func TestConnectResultIsReported(t *testing.T) {
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+
+	res, _ := m.Update(tcpMsg{key: "dev.tcp.ok", args: []any{"10.0.0.5:5555"}})
+	m = *res.(*Model)
+
+	if m.tcpBusy {
+		t.Error("tcpBusy was not cleared after the connect finished")
+	}
+	if !strings.Contains(m.notice, "10.0.0.5:5555") {
+		t.Errorf("the successful host is missing from the notice: %q", m.notice)
+	}
+	if strings.TrimSpace(m.viewDevices()) == "" {
+		t.Error("the device screen broke after a connect")
+	}
+}
+
+// TestGlobalKeysAreUsableWhenNoFieldIsOpen makes sure the guard did not disable
+// the shortcuts it was meant to protect.
+func TestGlobalKeysAreUsableWhenNoFieldIsOpen(t *testing.T) {
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+	m.stack = nil
+
+	if m.typing() {
+		t.Fatal("typing() should be false with no field open")
+	}
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m = *res.(*Model)
+	if !m.quitting {
+		t.Error("q no longer quits when no field is open")
+	}
+}

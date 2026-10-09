@@ -120,6 +120,8 @@ type Model struct {
 	haveDev   bool
 	showFull  bool
 	tcpPrompt bool
+	// tcpBusy marks an in flight adb/fastboot connect.
+	tcpBusy bool
 
 	// menu
 	cats   []string

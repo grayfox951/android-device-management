@@ -88,6 +88,13 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tcpMsg:
+		m.scanning = false
+		m.tcpBusy = false
+		m.notice = i18nT(msg.key, msg.args...)
+		// The device list is stale the moment it joins, so refresh it.
+		return m, m.scanDevices()
+
 	case tea.KeyMsg:
 		if m.confirm == confirmQuit {
 			switch msg.String() {
@@ -99,6 +106,12 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirm = confirmNone
 			}
 			return m, nil
+		}
+
+		// The TCP host field owns the keyboard while it is open. This has to be
+		// checked before the key switch below, which returns for every key.
+		if m.tcpPrompt {
+			return m.updateTCPPrompt(msg)
 		}
 
 		switch msg.String() {
@@ -122,52 +135,97 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.enrichAndSelect(m.devIdx)
 		case "t":
-			m.tcpPrompt = true
-			m.ti.SetValue("")
-			m.ti.Placeholder = i18n.Get("dev.tcp.host")
+			m.openTCPPrompt()
 			return m, m.ti.Focus()
 		case "c":
 			return m, disconnectTCP()
 		}
 		return m, nil
 	}
+	return m, nil
+}
 
-	// The TCP host field owns the keyboard while it is open.
+// openTCPPrompt shows the host field. It does not toggle: once the field is
+// open every key belongs to it, so t has to be typeable for hostnames.
+func (m *Model) openTCPPrompt() {
 	if m.tcpPrompt {
-		var cmd tea.Cmd
-		m.ti, cmd = m.ti.Update(msg)
-		if key, ok := msg.(tea.KeyMsg); ok {
-			switch key.String() {
-			case "enter":
-				host := strings.TrimSpace(m.ti.Value())
-				m.tcpPrompt = false
-				m.ti.Blur()
-				if host == "" {
-					return m, nil
-				}
-				return m, connectTCP(host)
-			case "esc":
-				m.tcpPrompt = false
-				m.ti.Blur()
+		return
+	}
+	m.tcpPrompt = true
+	m.ti.SetValue("")
+	m.ti.Placeholder = i18n.Get("dev.tcp.host")
+}
+
+func (m *Model) closeTCPPrompt() {
+	m.tcpPrompt = false
+	m.ti.Blur()
+	m.ti.Placeholder = ""
+	m.ti.SetValue("")
+}
+
+// updateTCPPrompt feeds the host field and acts on enter and esc.
+func (m *Model) updateTCPPrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, isKey := msg.(tea.KeyMsg)
+	if isKey {
+		switch key.String() {
+		case "enter":
+			host := normaliseHost(m.ti.Value())
+			m.closeTCPPrompt()
+			if host == "" {
 				return m, nil
 			}
+			m.tcpBusy = true
+			return m, connectTCP(host)
+		case "esc":
+			m.closeTCPPrompt()
+			return m, nil
 		}
-		return m, cmd
 	}
-	return m, nil
+
+	var cmd tea.Cmd
+	m.ti, cmd = m.ti.Update(msg)
+	return m, cmd
+}
+
+// normaliseHost trims the field and supplies the default adb port, which is
+// what a phone listens on unless wireless debugging picked another one.
+func normaliseHost(raw string) string {
+	host := strings.TrimSpace(raw)
+	if host == "" {
+		return ""
+	}
+	if strings.ContainsAny(host, ": ") || strings.Contains(host, ":") {
+		return host
+	}
+	return host + ":5555"
 }
 
 func connectTCP(host string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := contextWithTimeout()
 		defer cancel()
+
 		var lines []string
+		ok := false
 		for _, r := range android.ConnectTCP(ctx, host) {
-			if s := r.Trimmed(); s != "" {
-				lines = append(lines, s)
+			s := r.Trimmed()
+			if s == "" {
+				continue
+			}
+			lines = append(lines, s)
+			if strings.Contains(s, "connected to") {
+				ok = true
 			}
 		}
-		return tcpMsg{lines: lines}
+		if ok {
+			return tcpMsg{key: "dev.tcp.ok", args: []any{host}}
+		}
+		// Surface the tool's own words rather than inventing a message.
+		detail := host
+		if len(lines) > 0 {
+			detail = strings.Join(lines, " · ")
+		}
+		return tcpMsg{key: "dev.tcp.fail", args: []any{detail}}
 	}
 }
 
@@ -185,21 +243,24 @@ func (m *Model) enrichAndSelect(idx int) {
 	m.stack = nil
 }
 
+// disconnectTCP drops every network device from both tools.
 func disconnectTCP() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := contextWithTimeout()
 		defer cancel()
-		var out []string
+
 		for _, r := range android.DisconnectTCP(ctx) {
-			if s := r.Trimmed(); s != "" {
-				out = append(out, s)
-			}
+			_ = r
 		}
-		return tcpMsg{lines: out}
+		return tcpMsg{key: "dev.tcp.done", args: nil}
 	}
 }
 
-type tcpMsg struct{ lines []string }
+// tcpMsg reports the outcome of adb connect / fastboot connect.
+type tcpMsg struct {
+	key  string
+	args []any
+}
 
 func (m Model) viewDevices() string {
 	var body []string
@@ -224,6 +285,10 @@ func (m Model) viewDevices() string {
 		default:
 			body = append(body, "", stItemMuted.Render(i18n.T("dev.many", len(m.devices))))
 		}
+	}
+
+	if m.tcpBusy {
+		body = append(body, "", m.spinnerView(i18n.Get("dev.tcp.working")))
 	}
 
 	if m.tcpPrompt {
