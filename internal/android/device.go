@@ -379,12 +379,37 @@ func ConnectTCP(ctx context.Context, host string) []runner.Result {
 	return out
 }
 
+// PairTCP performs the wireless-debugging pairing handshake introduced in
+// Android 11. The host carries the pairing port that the phone shows under
+// "Pair device with pairing code", and the code is the six digit number shown
+// next to it. Pairing only authorises the workstation; a separate connect is
+// still needed afterwards.
+func PairTCP(ctx context.Context, host, code string) runner.Result {
+	return runner.RunQuiet(ctx, "adb", "pair", host, code)
+}
+
 // DisconnectTCP drops every network device.
 func DisconnectTCP(ctx context.Context) []runner.Result {
 	var out []runner.Result
 	out = append(out, runner.RunQuiet(ctx, "adb", "disconnect"))
 	out = append(out, runner.RunQuiet(ctx, "fastboot", "disconnect"))
 	return out
+}
+
+// Paired reports whether a pairing attempt succeeded. adb prints "Successfully
+// paired to ..." on success and "Failed: ..." on failure, both on stdout.
+func Paired(res runner.Result) (ok bool, detail string) {
+	detail = res.Trimmed()
+	for _, line := range strings.Split(detail, "\n") {
+		l := strings.TrimSpace(line)
+		if l == "" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(l), "successfully paired") {
+			return true, l
+		}
+	}
+	return false, detail
 }
 
 // Find looks a device up by serial in a scan result.

@@ -58,7 +58,7 @@ func RunSetup(lang string) (Model, error) {
 // must stand aside, otherwise typing a host like 10.0.0.4 would trigger the
 // rescan shortcut and typing q would quit the program.
 func (m Model) typing() bool {
-	if m.tcpPrompt {
+	if m.tcpMode != tcpClosed {
 		return true
 	}
 	return m.screen == screenArgs && m.ti.Focused()

@@ -108,10 +108,10 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// The TCP host field owns the keyboard while it is open. This has to be
+		// The network panel owns the keyboard while it is open. This has to be
 		// checked before the key switch below, which returns for every key.
-		if m.tcpPrompt {
-			return m.updateTCPPrompt(msg)
+		if m.tcpMode != tcpClosed {
+			return m.updateTCP(msg)
 		}
 
 		switch msg.String() {
@@ -135,56 +135,138 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.enrichAndSelect(m.devIdx)
 		case "t":
-			m.openTCPPrompt()
-			return m, m.ti.Focus()
-		case "c":
-			return m, disconnectTCP()
+			m.openTCP()
+			return m, nil
 		}
 		return m, nil
 	}
 	return m, nil
 }
 
-// openTCPPrompt shows the host field. It does not toggle: once the field is
-// open every key belongs to it, so t has to be typeable for hostnames.
-func (m *Model) openTCPPrompt() {
-	if m.tcpPrompt {
+// openTCP shows the network panel.
+func (m *Model) openTCP() {
+	if m.tcpMode != tcpClosed {
 		return
 	}
-	m.tcpPrompt = true
-	m.ti.SetValue("")
-	m.ti.Placeholder = i18n.Get("dev.tcp.host")
+	m.tcpMode = tcpMenu
+	m.tcpMenu = 0
 }
 
-func (m *Model) closeTCPPrompt() {
-	m.tcpPrompt = false
+// closeTCP puts the network panel away and clears the shared input.
+func (m *Model) closeTCP() {
+	m.tcpMode = tcpClosed
+	m.tcpHost = ""
 	m.ti.Blur()
 	m.ti.Placeholder = ""
 	m.ti.SetValue("")
 }
 
-// updateTCPPrompt feeds the host field and acts on enter and esc.
-func (m *Model) updateTCPPrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
+// focusTCPField points the shared input at one of the network prompts.
+func (m *Model) focusTCPField(placeholder, value string) tea.Cmd {
+	m.ti.Placeholder = placeholder
+	m.ti.SetValue(value)
+	return m.ti.Focus()
+}
+
+// updateTCP drives the whole network panel: the action list, the connect
+// address, and the two fields the pairing handshake needs.
+func (m *Model) updateTCP(msg tea.Msg) (tea.Model, tea.Cmd) {
 	key, isKey := msg.(tea.KeyMsg)
+
 	if isKey {
-		switch key.String() {
-		case "enter":
-			host := normaliseHost(m.ti.Value())
-			m.closeTCPPrompt()
-			if host == "" {
+		switch m.tcpMode {
+		case tcpMenu:
+			switch key.String() {
+			case "up", "k":
+				if m.tcpMenu > 0 {
+					m.tcpMenu--
+				}
 				return m, nil
+			case "down", "j":
+				if m.tcpMenu < len(tcpActions)-1 {
+					m.tcpMenu++
+				}
+				return m, nil
+			case "esc":
+				m.closeTCP()
+				return m, nil
+			case "enter":
+				return m.chooseTCPAction()
 			}
-			m.tcpBusy = true
-			return m, connectTCP(host)
-		case "esc":
-			m.closeTCPPrompt()
-			return m, nil
+		default:
+			switch key.String() {
+			case "esc":
+				// Back to the action list rather than closing outright, so a
+				// mistyped host does not cost the whole panel.
+				m.tcpMode = tcpMenu
+				m.ti.Blur()
+				m.ti.SetValue("")
+				return m, nil
+			case "enter":
+				return m.submitTCPField()
+			}
 		}
 	}
 
 	var cmd tea.Cmd
 	m.ti, cmd = m.ti.Update(msg)
 	return m, cmd
+}
+
+// chooseTCPAction opens the prompt for the selected network action.
+func (m *Model) chooseTCPAction() (tea.Model, tea.Cmd) {
+	switch tcpActions[m.tcpMenu].ID {
+	case "pair":
+		m.tcpMode = tcpPairHost
+		return m, m.focusTCPField(i18n.Get("dev.tcp.pair.host"), "")
+	case "disconnect":
+		m.closeTCP()
+		return m, disconnectTCP()
+	default:
+		m.tcpMode = tcpConnect
+		return m, m.focusTCPField(i18n.Get("dev.tcp.host"), "")
+	}
+}
+
+// submitTCPField validates the current field and either advances to the next
+// one or starts the action.
+func (m *Model) submitTCPField() (tea.Model, tea.Cmd) {
+	switch m.tcpMode {
+	case tcpConnect:
+		host := normaliseHost(m.ti.Value())
+		if host == "" {
+			return m, nil
+		}
+		m.closeTCP()
+		m.tcpBusy = true
+		return m, connectTCP(host)
+
+	case tcpPairHost:
+		host := strings.TrimSpace(m.ti.Value())
+		if host == "" {
+			return m, nil
+		}
+		// Pairing always shows a port on the phone, and guessing one would
+		// only produce a confusing timeout.
+		if !strings.Contains(host, ":") {
+			m.notice = i18n.Get("dev.tcp.pair.noport")
+			return m, nil
+		}
+		m.tcpHost = host
+		m.tcpMode = tcpPairCode
+		return m, m.focusTCPField(i18n.Get("dev.tcp.pair.code"), "")
+
+	case tcpPairCode:
+		code := strings.TrimSpace(m.ti.Value())
+		if code == "" {
+			return m, nil
+		}
+		host := m.tcpHost
+		m.closeTCP()
+		m.tcpBusy = true
+		return m, pairTCP(host, code)
+	}
+	return m, nil
 }
 
 // normaliseHost trims the field and supplies the default adb port, which is
@@ -194,10 +276,29 @@ func normaliseHost(raw string) string {
 	if host == "" {
 		return ""
 	}
-	if strings.ContainsAny(host, ": ") || strings.Contains(host, ":") {
+	if strings.Contains(host, ":") {
 		return host
 	}
 	return host + ":5555"
+}
+
+// pairTCP runs the wireless-debugging pairing handshake and reports it the same
+// way a connect is reported.
+func pairTCP(host, code string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := contextWithTimeout()
+		defer cancel()
+
+		res := android.PairTCP(ctx, host, code)
+		ok, detail := android.Paired(res)
+		if ok {
+			return tcpMsg{key: "dev.tcp.pair.ok", args: []any{detail}}
+		}
+		if detail == "" {
+			detail = i18nT("err.exec", res.Err)
+		}
+		return tcpMsg{key: "dev.tcp.pair.fail", args: []any{detail}}
+	}
 }
 
 func connectTCP(host string) tea.Cmd {
@@ -244,6 +345,69 @@ func (m *Model) enrichAndSelect(idx int) {
 }
 
 // disconnectTCP drops every network device from both tools.
+// tcpPanel renders whichever part of the network panel is open.
+func (m Model) tcpPanel() []string {
+	switch m.tcpMode {
+	case tcpClosed:
+		return nil
+	case tcpMenu:
+		var rows []string
+		maxW := 0
+		for _, a := range tcpActions {
+			if n := lipgloss.Width(i18n.Get(a.Key)); n > maxW {
+				maxW = n
+			}
+		}
+		for i, a := range tcpActions {
+			rows = append(rows, "  "+selector(i == m.tcpMenu, maxW, i18n.Get(a.Key)))
+		}
+		return []string{
+			stHeader.Render(i18n.Get("dev.tcp.menu")),
+			"",
+			lipgloss.JoinVertical(lipgloss.Left, rows...),
+			"",
+			m.para(i18n.Get("dev.tcp.pair.hint")),
+			"",
+			m.hint(keyCap("enter") + " — " + i18n.Get("common.ok") +
+				"  ·  " + keyCap("esc") + " — " + i18n.Get("common.cancel")),
+		}
+	case tcpConnect:
+		return []string{
+			stHeader.Render(i18n.Get("dev.tcp.connect")),
+			"",
+			m.ti.View(),
+			"",
+			m.hint(keyCap("enter") + " — " + i18n.Get("common.ok") +
+				"  ·  " + keyCap("esc") + " — " + i18n.Get("common.back")),
+		}
+	case tcpPairHost:
+		return []string{
+			stHeader.Render(i18n.Get("dev.tcp.pair.title")),
+			"",
+			stLabel.Render(i18n.Get("dev.tcp.pair.host")),
+			m.ti.View(),
+			"",
+			m.para(i18n.Get("dev.tcp.pair.where")),
+			"",
+			m.hint(keyCap("enter") + " — " + i18n.Get("common.ok") +
+				"  ·  " + keyCap("esc") + " — " + i18n.Get("common.back")),
+		}
+	case tcpPairCode:
+		return []string{
+			stHeader.Render(i18n.Get("dev.tcp.pair.title")),
+			"",
+			stLabel.Render(i18n.Get("dev.tcp.pair.code")),
+			m.ti.View(),
+			"",
+			stValue.Render(m.tcpHost),
+			"",
+			m.hint(keyCap("enter") + " — " + i18n.Get("common.run") +
+				"  ·  " + keyCap("esc") + " — " + i18n.Get("common.back")),
+		}
+	}
+	return nil
+}
+
 func disconnectTCP() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := contextWithTimeout()
@@ -291,12 +455,7 @@ func (m Model) viewDevices() string {
 		body = append(body, "", m.spinnerView(i18n.Get("dev.tcp.working")))
 	}
 
-	if m.tcpPrompt {
-		body = append(body, "", stLabel.Render(i18n.Get("dev.tcp.connect")))
-		body = append(body, m.ti.View())
-		body = append(body, m.hint(keyCap("enter")+" — "+i18n.Get("common.ok")+
-			"  ·  "+keyCap("esc")+" — "+i18n.Get("common.cancel")))
-	}
+	body = append(body, m.tcpPanel()...)
 
 	box := boxStyle(m).Render(lipgloss.JoinVertical(lipgloss.Left, body...))
 
@@ -304,8 +463,7 @@ func (m Model) viewDevices() string {
 		m.hint(keyCap("↑↓")+" — "+i18n.Get("common.select")+
 			"  ·  "+keyCap("enter")+" — "+i18n.Get("common.ok")+
 			"  ·  "+keyCap("r")+" — "+i18n.Get("common.refresh")),
-		m.hint(keyCap("t")+" — "+i18n.Get("dev.tcp.connect")+
-			"  ·  "+keyCap("c")+" — "+i18n.Get("dev.tcp.disconn")+
+		m.hint(keyCap("t")+" — "+i18n.Get("dev.tcp.menu")+
 			"  ·  "+keyCap("q")+" — "+i18n.Get("common.quit")),
 	)
 

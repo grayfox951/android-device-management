@@ -48,6 +48,27 @@ const (
 	confirmQuit
 )
 
+// tcpMode says which network prompt is on screen, if any.
+type tcpMode int
+
+const (
+	tcpClosed tcpMode = iota
+	tcpMenu
+	tcpConnect
+	tcpPairHost
+	tcpPairCode
+)
+
+// tcpActions are the entries of the network panel, in display order.
+var tcpActions = []struct {
+	ID  string
+	Key string
+}{
+	{"connect", "dev.tcp.action.connect"},
+	{"pair", "dev.tcp.action.pair"},
+	{"disconnect", "dev.tcp.action.disconnect"},
+}
+
 // Start values let main choose the entry screen.
 const (
 	// StartLang shows the language picker first.
@@ -112,16 +133,19 @@ type Model struct {
 	pre preflight
 
 	// devices
-	devices   []android.Device
-	device    android.Device
-	devIdx    int
-	scanning  bool
-	scanErr   error
-	haveDev   bool
-	showFull  bool
-	tcpPrompt bool
-	// tcpBusy marks an in flight adb/fastboot connect.
+	devices  []android.Device
+	device   android.Device
+	devIdx   int
+	scanning bool
+	scanErr  error
+	haveDev  bool
+	showFull bool
+	// tcpMode is what the network panel is currently asking for.
+	tcpMode tcpMode
+	tcpMenu int
+	tcpHost string
 	tcpBusy bool
+	_       struct{}
 
 	// menu
 	cats   []string

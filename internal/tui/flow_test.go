@@ -578,8 +578,15 @@ func TestTCPFieldOwnsTheKeyboard(t *testing.T) {
 
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
 	m = *res.(*Model)
-	if !m.tcpPrompt {
-		t.Fatal("t did not open the host field")
+	if m.tcpMode != tcpMenu {
+		t.Fatal("t did not open the network panel")
+	}
+	// Pick "connect", the first entry.
+	res, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *res.(*Model)
+	_ = cmd
+	if m.tcpMode != tcpConnect {
+		t.Fatalf("selecting connect gave mode %d", m.tcpMode)
 	}
 
 	// Type a host that contains the letters bound to global shortcuts.
@@ -608,7 +615,7 @@ func TestTCPFieldOwnsTheKeyboard(t *testing.T) {
 func TestGlobalKeysStandDownWhileTyping(t *testing.T) {
 	m := testModel(t, i18n.EN)
 	m.screen = screenDevices
-	m.tcpPrompt = true
+	m.tcpMode = tcpConnect
 	m.ti.Focus()
 
 	if !m.typing() {
@@ -632,25 +639,35 @@ func TestTCPPromptCancelAndToggle(t *testing.T) {
 
 	open := func(src Model) Model {
 		res, _ := src.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+		src = *res.(*Model)
+		res, _ = src.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		return *res.(*Model)
 	}
 
 	m = open(m)
 	m.ti.SetValue("10.0.0.1")
 
+	// esc goes back to the action list rather than closing everything.
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = *res.(*Model)
-	if m.tcpPrompt {
-		t.Error("esc did not close the field")
+	if m.tcpMode != tcpMenu {
+		t.Error("esc did not return to the network menu")
 	}
 	if m.ti.Value() != "" {
 		t.Errorf("cancelled host was not cleared: %q", m.ti.Value())
 	}
 
-	// Inside the field t is just a character, not a shortcut.
+	// esc from the menu closes the panel.
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = *res.(*Model)
+	if m.tcpMode != tcpClosed {
+		t.Error("esc did not close the network panel")
+	}
+
+	// Inside a field t is just a character, not a shortcut.
 	m = open(m)
 	m.ti.SetValue("t")
-	if !m.tcpPrompt {
+	if m.tcpMode != tcpConnect {
 		t.Error("t inside the field closed it instead of being typed")
 	}
 }
@@ -706,5 +723,129 @@ func TestGlobalKeysAreUsableWhenNoFieldIsOpen(t *testing.T) {
 	m = *res.(*Model)
 	if !m.quitting {
 		t.Error("q no longer quits when no field is open")
+	}
+}
+
+// ------------------------------------------------------------ wireless pair
+
+// pickPair walks the panel to the pairing address field.
+func pickPair(t *testing.T) Model {
+	t.Helper()
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	m = *res.(*Model)
+	// Move from "connect" to "pair".
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = *res.(*Model)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *res.(*Model)
+	if m.tcpMode != tcpPairHost {
+		t.Fatalf("selecting pair gave mode %d", m.tcpMode)
+	}
+	return m
+}
+
+func TestPairFlowAsksForAddressThenCode(t *testing.T) {
+	m := pickPair(t)
+
+	m.ti.SetValue("192.168.1.5:39871")
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *res.(*Model)
+
+	if m.tcpMode != tcpPairCode {
+		t.Fatalf("after the address the mode is %d, want the code field", m.tcpMode)
+	}
+	if m.tcpHost != "192.168.1.5:39871" {
+		t.Errorf("the address was not kept, got %q", m.tcpHost)
+	}
+	if m.ti.Value() != "" {
+		t.Errorf("the code field is not empty: %q", m.ti.Value())
+	}
+
+	// The code is typed into the same input without a port being invented.
+	m.ti.SetValue("123456")
+	res, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *res.(*Model)
+	if cmd == nil {
+		t.Fatal("submitting the code produced no command")
+	}
+	if m.tcpMode != tcpClosed {
+		t.Error("the panel stayed open after a pair attempt")
+	}
+	if !m.tcpBusy {
+		t.Error("tcpBusy was not set while pairing")
+	}
+}
+
+func TestPairRequiresAPort(t *testing.T) {
+	m := pickPair(t)
+
+	// The phone always shows a port; guessing one only produces a timeout.
+	m.ti.SetValue("192.168.1.5")
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *res.(*Model)
+
+	if m.tcpMode != tcpPairHost {
+		t.Error("an address without a port advanced to the code field")
+	}
+	if m.notice == "" {
+		t.Error("no explanation was shown for the missing port")
+	}
+	if !strings.Contains(m.notice, "192.168.1.5:39871") {
+		t.Errorf("the hint does not show an example: %q", m.notice)
+	}
+}
+
+func TestPairResultIsReported(t *testing.T) {
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+
+	res, _ := m.Update(tcpMsg{key: "dev.tcp.pair.ok",
+		args: []any{"Successfully paired to 192.168.1.5:39871"}})
+	m = *res.(*Model)
+
+	if m.tcpBusy {
+		t.Error("tcpBusy was not cleared after pairing")
+	}
+	if !strings.Contains(m.notice, "Successfully paired") {
+		t.Errorf("the pairing result is missing from the notice: %q", m.notice)
+	}
+	// The message has to point at the connect step, since pairing alone is
+	// not enough to talk to the phone.
+	if !strings.Contains(m.notice, "Connect") {
+		t.Errorf("the notice does not mention the follow up connect: %q", m.notice)
+	}
+}
+
+func TestPairFieldOwnsTheKeyboard(t *testing.T) {
+	m := pickPair(t)
+
+	// A pairing code is digits, but the guard must hold for any input.
+	for _, ch := range "q1r2" {
+		res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		m = *res.(*Model)
+	}
+	if m.ti.Value() != "q1r2" {
+		t.Errorf("the code field holds %q, want q1r2", m.ti.Value())
+	}
+	if m.quitting {
+		t.Error("q quit the program from inside the pairing field")
+	}
+}
+
+func TestNetworkPanelListsEveryAction(t *testing.T) {
+	m := testModel(t, i18n.EN)
+	m.screen = screenDevices
+	m.tcpMode = tcpMenu
+
+	view := stripANSI(m.viewDevices())
+	// The labels are translated, so look those up rather than the action ids.
+	for _, action := range tcpActions {
+		label := i18n.Get(action.Key)
+		if label == action.Key || !strings.Contains(view, label) {
+			t.Errorf("the network panel is missing %s (%q)", action.ID, label)
+		}
 	}
 }
