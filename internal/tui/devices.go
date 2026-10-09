@@ -77,8 +77,11 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// A single ready device is selected straight away.
-		if len(m.devices) == 1 {
+		// A single USB device is selected straight away. A device reached over
+		// the network is never picked automatically, even on its own: the
+		// cable phone may still be about to appear, and silently choosing the
+		// wireless one is how the wrong handset gets flashed.
+		if len(m.devices) == 1 && !m.devices[0].TCP() {
 			m.devIdx = 0
 			m.enrichAndSelect(0)
 			return m, nil

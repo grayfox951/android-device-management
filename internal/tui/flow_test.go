@@ -849,3 +849,105 @@ func TestNetworkPanelListsEveryAction(t *testing.T) {
 		}
 	}
 }
+
+// ------------------------------------------------------- device auto-select
+
+func scanWith(t *testing.T, devices ...android.Device) Model {
+	t.Helper()
+	m := testModel(t, i18n.RU)
+	m.screen = screenDevices
+	res, _ := m.Update(devicesMsg{devices: devices})
+	return *res.(*Model)
+}
+
+func usbDevice() android.Device {
+	return android.Device{Serial: "USB1", Mode: android.ModeADB, State: "device",
+		Transport: "usb", Boot: android.BootUnlocked}
+}
+
+func netDevice() android.Device {
+	return android.Device{Serial: "10.0.0.5:5555", Mode: android.ModeADB, State: "device",
+		Transport: "tcp", Boot: android.BootUnlocked}
+}
+
+// TestSingleUSBDeviceIsAutoSelected keeps the convenience the user asked to
+// keep: one device on the cable needs no extra keystroke.
+func TestSingleUSBDeviceIsAutoSelected(t *testing.T) {
+	m := scanWith(t, usbDevice())
+	if m.screen != screenMenu {
+		t.Errorf("a single USB device left the screen at %d, want the menu", m.screen)
+	}
+	if !m.haveDev || m.device.Serial != "USB1" {
+		t.Errorf("the USB device was not taken: %+v", m.device)
+	}
+}
+
+// TestSingleNetworkDeviceIsNotAutoSelected is the requested change: a wireless
+// device waits to be picked.
+func TestSingleNetworkDeviceIsNotAutoSelected(t *testing.T) {
+	m := scanWith(t, netDevice())
+	if m.screen != screenDevices {
+		t.Errorf("a single network device jumped to screen %d, want the list", m.screen)
+	}
+	if m.haveDev {
+		t.Errorf("the network device was taken without asking: %+v", m.device)
+	}
+	if len(m.devices) != 1 || m.devices[0].Serial != "10.0.0.5:5555" {
+		t.Errorf("the list should still hold the device, got %+v", m.devices)
+	}
+
+	// It can still be chosen by hand.
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *res.(*Model)
+	if m.screen != screenMenu || m.device.Serial != "10.0.0.5:5555" {
+		t.Errorf("the network device could not be chosen by hand: screen=%d dev=%q",
+			m.screen, m.device.Serial)
+	}
+}
+
+// TestSwitchDeviceRespectsTheNetworkRule covers the entry point the user
+// named: switching away and back must behave the same way.
+func TestSwitchDeviceRespectsTheNetworkRule(t *testing.T) {
+	m := scanWith(t, usbDevice())
+	if m.screen != screenMenu {
+		t.Fatalf("setup failed, screen=%d", m.screen)
+	}
+
+	// The "switch device" row sits just below the category list.
+	entries := m.menuEntries()
+	idx := -1
+	for i, e := range entries {
+		if e.id == "act:switch" {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		t.Fatal("the switch device entry is missing from the menu")
+	}
+	m.catIdx = idx
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *res.(*Model)
+	if m.screen != screenDevices {
+		t.Fatalf("switch device went to screen %d", m.screen)
+	}
+
+	// Now with a wireless device as the only one, switching must not select it.
+	res, _ = m.Update(devicesMsg{devices: []android.Device{netDevice()}})
+	m = *res.(*Model)
+	if m.screen != screenDevices {
+		t.Errorf("switching with a single network device landed on %d, want the list", m.screen)
+	}
+	if m.haveDev {
+		t.Errorf("switching auto selected the network device: %+v", m.device)
+	}
+}
+
+func TestSeveralDevicesAreNeverAutoSelected(t *testing.T) {
+	m := scanWith(t, usbDevice(), netDevice())
+	if m.screen != screenDevices {
+		t.Errorf("with two devices the screen is %d, want the list", m.screen)
+	}
+	if m.haveDev {
+		t.Error("a device was chosen without asking when several were present")
+	}
+}
