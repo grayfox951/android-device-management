@@ -700,5 +700,69 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// --------------------------------------------------------------- debug
+	c = append(c,
+		Command{
+			ID: "logcat", Category: CatDebug, Mode: ModeADB, Label: "logcat",
+			DescKey: "d.logcat",
+			Args:    []Arg{choice("buffer", "buffer", "", shellCmds("main", "system", "radio", "events", "crash", "all")...)},
+			Build: func(d Device, v map[string]string) []string {
+				if v["buffer"] == "" {
+					return d.ADB("logcat")
+				}
+				return d.ADB("logcat", "-b", v["buffer"])
+			},
+		},
+		Command{
+			ID: "logcat.clear", Category: CatDebug, Mode: ModeADB, Label: "logcat -c",
+			DescKey: "d.logcat.clear",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("logcat", "-c")
+			},
+		},
+		Command{
+			ID: "logcat.file", Category: CatDebug, Mode: ModeADB,
+			Label: "logcat -d > <file>", DescKey: "d.logcat.file",
+			Args:     []Arg{file("out")},
+			Redirect: "out",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("logcat", "-d")
+			},
+		},
+		Command{
+			ID: "dumpsys", Category: CatDebug, Mode: ModeADB, Label: "dumpsys <service>",
+			DescKey: "d.dumpsys",
+			Args: []Arg{choice("service", "service", "",
+				shellCmds("activity", "window", "package", "meminfo", "battery", "power", "wifi", "connectivity", "audio", "input", "alarm", "notification", "deviceidle", "usagestats", "display", "SurfaceFlinger")...)},
+			Build: func(d Device, v map[string]string) []string {
+				if v["service"] == "" {
+					return d.ADB("shell", "dumpsys")
+				}
+				return d.ADB("shell", "dumpsys", v["service"])
+			},
+		},
+		Command{
+			ID: "bugreport", Category: CatDebug, Mode: ModeADB, Label: "bugreport",
+			DescKey: "d.bugreport",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("bugreport")
+			},
+		},
+		Command{
+			ID: "debug.ports", Category: CatDebug, Mode: ModeADB, Label: "shell /proc/net/tcp + getprop",
+			DescKey: "d.debug.ports",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sh", "-c", "cat /proc/net/tcp 2>/dev/null | head -20; echo; getprop")
+			},
+		},
+		Command{
+			ID: "debug.track", Category: CatDebug, Mode: ModeADB, Label: "track-devices",
+			DescKey: "d.debug.track",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("track-devices")
+			},
+		},
+	)
+
 	return c
 }
