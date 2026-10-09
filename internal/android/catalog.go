@@ -486,5 +486,155 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// -------------------------------------------------------------- system
+	c = append(c,
+		Command{
+			ID: "shell", Category: CatSystem, Mode: ModeADB, Label: "shell <command>",
+			DescKey: "d.shell",
+			Args:    []Arg{txt("cmd", "command", "")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sh", "-c", v["cmd"])
+			},
+		},
+		Command{
+			ID: "su.check", Category: CatSystem, Mode: ModeADB, Label: "su -c id", Root: true,
+			DescKey: "d.su.check",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "su", "-c", "id")
+			},
+		},
+		Command{
+			ID: "settings.list", Category: CatSystem, Mode: ModeADB, Label: "settings list global/system/secure",
+			DescKey: "d.settings.list",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sh", "-c", "settings list global; echo; settings list system; echo; settings list secure")
+			},
+		},
+		Command{
+			ID: "settings.put", Category: CatSystem, Mode: ModeADB, Label: "settings put <namespace> <key> <value>",
+			DescKey: "d.settings.put",
+			Args: []Arg{
+				choice("ns", "namespace", "global",
+					ChoiceOpt{Value: "global", Label: "global"},
+					ChoiceOpt{Value: "system", Label: "system"},
+					ChoiceOpt{Value: "secure", Label: "secure"}),
+				txt("key", "key", ""), txt("value", "value", ""),
+			},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "settings", "put", v["ns"], v["key"], v["value"])
+			},
+		},
+		Command{
+			ID: "settings.get", Category: CatSystem, Mode: ModeADB, Label: "settings get <namespace> <key>",
+			DescKey: "d.settings.get",
+			Args: []Arg{
+				choice("ns", "namespace", "global",
+					ChoiceOpt{Value: "global", Label: "global"},
+					ChoiceOpt{Value: "system", Label: "system"},
+					ChoiceOpt{Value: "secure", Label: "secure"}),
+				txt("key", "key", ""),
+			},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "settings", "get", v["ns"], v["key"])
+			},
+		},
+		Command{
+			ID: "setprop", Category: CatSystem, Mode: ModeADB, Label: "setprop <key> <value>",
+			DescKey: "d.setprop", Root: true,
+			Args: []Arg{txt("key", "key", ""), txt("value", "value", "")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "su", "-c", "setprop "+v["key"]+" "+v["value"])
+			},
+		},
+		Command{
+			ID: "input.keyevent", Category: CatSystem, Mode: ModeADB, Label: "input keyevent <code>",
+			DescKey: "d.input.keyevent",
+			Args: []Arg{choice("code", "key", "KEYCODE_HOME",
+				ChoiceOpt{Value: "KEYCODE_HOME", Label: "HOME"},
+				ChoiceOpt{Value: "KEYCODE_BACK", Label: "BACK"},
+				ChoiceOpt{Value: "KEYCODE_POWER", Label: "POWER"},
+				ChoiceOpt{Value: "KEYCODE_VOLUME_UP", Label: "VOLUME UP"},
+				ChoiceOpt{Value: "KEYCODE_VOLUME_DOWN", Label: "VOLUME DOWN"},
+				ChoiceOpt{Value: "KEYCODE_CAMERA", Label: "CAMERA"},
+				ChoiceOpt{Value: "KEYCODE_WAKEUP", Label: "WAKEUP"},
+				ChoiceOpt{Value: "KEYCODE_SLEEP", Label: "SLEEP"},
+				ChoiceOpt{Value: "KEYCODE_APP_SWITCH", Label: "RECENTS"},
+				ChoiceOpt{Value: "KEYCODE_MENU", Label: "MENU"})},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "input", "keyevent", v["code"])
+			},
+		},
+		Command{
+			ID: "input.text", Category: CatSystem, Mode: ModeADB, Label: "input text <text>",
+			DescKey: "d.input.text",
+			Args:    []Arg{txt("text", "text", "hello")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "input", "text", v["text"])
+			},
+		},
+		Command{
+			ID: "input.tap", Category: CatSystem, Mode: ModeADB, Label: "input tap <x> <y>",
+			DescKey: "d.input.tap",
+			Args:    []Arg{txt("x", "x", "500"), txt("y", "y", "1000")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "input", "tap", v["x"], v["y"])
+			},
+		},
+		Command{
+			ID: "input.swipe", Category: CatSystem, Mode: ModeADB, Label: "input swipe <x1> <y1> <x2> <y2> [ms]",
+			DescKey: "d.input.swipe",
+			Args:    []Arg{txt("x1", "x1", "500"), txt("y1", "y1", "1500"), txt("x2", "x2", "500"), txt("y2", "y2", "300"), txt("ms", "duration ms", "300")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "input", "swipe", v["x1"], v["y1"], v["x2"], v["y2"], v["ms"])
+			},
+		},
+		Command{
+			ID: "wm.density", Category: CatSystem, Mode: ModeADB, Label: "wm density <dpi>",
+			DescKey: "d.wm.density",
+			Args:    []Arg{txt("dpi", "dpi", "420")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "wm", "density", v["dpi"])
+			},
+		},
+		Command{
+			ID: "wm.size", Category: CatSystem, Mode: ModeADB, Label: "wm size <WxH>",
+			DescKey: "d.wm.size",
+			Args:    []Arg{txt("size", "WxH", "1080x2400")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "wm", "size", v["size"])
+			},
+		},
+		Command{
+			ID: "pm.permissions", Category: CatSystem, Mode: ModeADB, Label: "dumpsys package <pkg> (permissions)",
+			DescKey: "d.pm.permissions", Args: []Arg{pkg()},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "dumpsys", "package", v["package"])
+			},
+		},
+		Command{
+			ID: "am.start", Category: CatSystem, Mode: ModeADB, Label: "am start <component>",
+			DescKey: "d.am.start",
+			Args:    []Arg{txt("component", "component", "")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "am", "start", "-n", v["component"])
+			},
+		},
+		Command{
+			ID: "am.intent", Category: CatSystem, Mode: ModeADB, Label: "am start <action>/<data>",
+			DescKey: "d.am.intent",
+			Args:    []Arg{txt("uri", "action or uri", "")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "am", "start", "-a", v["uri"])
+			},
+		},
+		Command{
+			ID: "service.list", Category: CatSystem, Mode: ModeADB, Label: "shell service list",
+			DescKey: "d.service.list",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "service", "list")
+			},
+		},
+	)
+
 	return c
 }
