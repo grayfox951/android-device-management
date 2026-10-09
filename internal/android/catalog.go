@@ -385,5 +385,65 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// ---------------------------------------------------------------- boot
+	c = append(c,
+		Command{
+			ID: "reboot", Category: CatBoot, Mode: ModeADB, Label: "reboot",
+			DescKey: "d.reboot",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("reboot")
+			},
+		},
+		Command{
+			ID: "reboot.bootloader", Category: CatBoot, Mode: ModeADB, Label: "reboot bootloader",
+			DescKey: "d.reboot.bootloader",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("reboot", "bootloader")
+			},
+		},
+		Command{
+			ID: "reboot.recovery", Category: CatBoot, Mode: ModeADB, Label: "reboot recovery",
+			DescKey: "d.reboot.recovery",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("reboot", "recovery")
+			},
+		},
+		Command{
+			ID: "reboot.sideload", Category: CatBoot, Mode: ModeADB, Label: "reboot sideload",
+			DescKey: "d.reboot.sideload",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("reboot", "sideload")
+			},
+		},
+		Command{
+			ID: "reboot.edl", Category: CatBoot, Mode: ModeADB, Label: "reboot edl (download mode)",
+			DescKey: "d.reboot.edl", Gate: GateUnlocked, Risk: true,
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("reboot", "edl")
+			},
+		},
+		Command{
+			ID: "remount", Category: CatBoot, Mode: ModeADB, Label: "remount",
+			DescKey: "d.remount", Root: true,
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("remount")
+			},
+		},
+		Command{
+			ID: "stayawake", Category: CatBoot, Mode: ModeADB, Label: "svc power stayon true",
+			DescKey: "d.stayawake",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "svc", "power", "stayon", "true")
+			},
+		},
+		Command{
+			ID: "root.restart", Category: CatBoot, Mode: ModeADB, Label: "adbd restart (root)", Root: true,
+			DescKey: "d.root.restart",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("root")
+			},
+		},
+	)
+
 	return c
 }
