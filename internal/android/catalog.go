@@ -304,5 +304,86 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// ---------------------------------------------------------------- apps
+	c = append(c,
+		Command{
+			ID: "pm.list", Category: CatApps, Mode: ModeADB, Label: "pm list packages",
+			DescKey: "d.pm.list",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "pm", "list", "packages")
+			},
+		},
+		Command{
+			ID: "pm.list3", Category: CatApps, Mode: ModeADB, Label: "pm list packages -3",
+			DescKey: "d.pm.list3",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "pm", "list", "packages", "-3")
+			},
+		},
+		Command{
+			ID: "pm.path", Category: CatApps, Mode: ModeADB, Label: "pm path <package>",
+			DescKey: "d.pm.path", Args: []Arg{pkg()},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "pm", "path", v["package"])
+			},
+		},
+		Command{
+			ID: "install", Category: CatApps, Mode: ModeADB, Label: "install <apk>",
+			DescKey: "d.install",
+			Args:    []Arg{file("apk")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("install", v["apk"])
+			},
+		},
+		Command{
+			ID: "install.r", Category: CatApps, Mode: ModeADB, Label: "install -r -d -g <apk>",
+			DescKey: "d.install.r",
+			Args:    []Arg{file("apk")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("install", "-r", "-d", "-g", v["apk"])
+			},
+		},
+		Command{
+			ID: "install.multiple", Category: CatApps, Mode: ModeADB, Label: "install-multiple -r <apks…>",
+			DescKey: "d.install.multiple",
+			Args:    []Arg{file("apks")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("install-multiple", "-r", v["apks"])
+			},
+		},
+		Command{
+			ID: "uninstall", Category: CatApps, Mode: ModeADB, Label: "uninstall <package>", Risk: true,
+			DescKey: "d.uninstall", Args: []Arg{pkg()},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("uninstall", v["package"])
+			},
+		},
+		Command{
+			ID: "pm.clear", Category: CatApps, Mode: ModeADB, Label: "pm clear <package>", Risk: true,
+			DescKey: "d.pm.clear", Args: []Arg{pkg()},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "pm", "clear", v["package"])
+			},
+		},
+		Command{
+			ID: "pm.dump", Category: CatApps, Mode: ModeADB, Label: "dumpsys package <package>",
+			DescKey: "d.pm.dump", Args: []Arg{pkg()},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "dumpsys", "package", v["package"])
+			},
+		},
+		Command{
+			ID: "pm.enable", Category: CatApps, Mode: ModeADB, Label: "pm enable / disable <package>",
+			DescKey: "d.pm.enable",
+			Args: []Arg{pkg(), choice("action", "action", "disable",
+				ChoiceOpt{Value: "enable", Label: "enable"},
+				ChoiceOpt{Value: "disable", Label: "disable"},
+				ChoiceOpt{Value: "clear", Label: "clear"})},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "pm", v["action"], v["package"])
+			},
+		},
+	)
+
 	return c
 }
