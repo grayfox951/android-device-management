@@ -32,7 +32,9 @@ if [ -z "${VERSION:-}" ]; then
 	VERSION="$(version_from_git || true)"
 fi
 if [ -z "${VERSION:-}" ]; then
-	VERSION="$(grep -oE 'version = "[^"]+"' internal/tui/app.go | head -1 | cut -d'"' -f2)"
+	# The declaration lives in the tui package, not in a single file, so look
+	# it up wherever it moved to rather than naming one file.
+	VERSION="$(grep -rhoE 'version = "[^"]+"' internal/tui/*.go | head -1 | cut -d'"' -f2)"
 fi
 VERSION="${VERSION:-0.0.0}"
 

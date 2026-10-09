@@ -19,7 +19,7 @@ const appName = "Android Device Management (TUI)"
 // version and author are shown on the about screen and in --version. Both can
 // be overridden at build time with -ldflags.
 var (
-	version = "1.0.0"
+	version = "1.0.1"
 	author  = "grayfox951"
 )
 

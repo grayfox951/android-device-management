@@ -299,3 +299,35 @@ func TestSetupScreenIsRenderable(t *testing.T) {
 		}
 	}
 }
+
+// TestDeclaredVersionIsSane guards the value build.sh falls back to when there
+// is no git history to read, which is exactly when nobody would notice it going
+// stale.
+func TestDeclaredVersionIsSane(t *testing.T) {
+	if !strings.HasPrefix(Version(), "1.") {
+		t.Errorf("declared version %q does not look like a release version", Version())
+	}
+	parts := strings.SplitN(Version(), ".", 3)
+	if len(parts) < 2 {
+		t.Fatalf("declared version %q is not dotted", Version())
+	}
+	for _, part := range parts[:2] {
+		if part == "" {
+			t.Fatalf("declared version %q has an empty component", Version())
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				t.Errorf("declared version %q has a non numeric component %q", Version(), part)
+			}
+		}
+	}
+	if strings.ContainsAny(Version(), "-+ ") {
+		t.Errorf("the declared version should carry no git suffix, got %q", Version())
+	}
+}
+
+func TestAuthorIsSet(t *testing.T) {
+	if Author() == "" {
+		t.Error("the author is empty")
+	}
+}
