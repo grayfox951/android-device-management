@@ -951,3 +951,144 @@ func TestSeveralDevicesAreNeverAutoSelected(t *testing.T) {
 		t.Error("a device was chosen without asking when several were present")
 	}
 }
+
+// --------------------------------------------------- disconnect prunes list
+
+func offlineNetDevice() android.Device {
+	d := netDevice()
+	d.State = "offline"
+	return d
+}
+
+// TestDisconnectRemovesNetworkDevicesImmediately is the reported bug: after
+// pressing disconnect the phone was still listed.
+func TestDisconnectRemovesNetworkDevicesImmediately(t *testing.T) {
+	m := testModel(t, i18n.RU)
+	m.screen = screenDevices
+	m.devices = []android.Device{usbDevice(), netDevice(), offlineNetDevice()}
+	m.devIdx = 2
+
+	res, _ := m.Update(tcpMsg{key: "dev.tcp.done", dropNetwork: true})
+	m = *res.(*Model)
+
+	if len(m.devices) != 1 {
+		t.Fatalf("the list still holds %d devices: %+v", len(m.devices), m.devices)
+	}
+	if m.devices[0].Serial != "USB1" {
+		t.Errorf("the wrong device survived: %+v", m.devices[0])
+	}
+}
+
+// TestDisconnectPrunesTheRescanToo covers adb reporting the phone as offline
+// for a while after the disconnect, which is what really happens.
+func TestDisconnectPrunesTheRescanToo(t *testing.T) {
+	// Two USB devices, so the single device shortcut never fires and the
+	// list stays where the test can look at it.
+	second := usbDevice()
+	second.Serial = "USB2"
+
+	m := testModel(t, i18n.RU)
+	m.screen = screenDevices
+
+	// First the disconnect arrives and starts a rescan.
+	res, _ := m.Update(tcpMsg{key: "dev.tcp.done", dropNetwork: true})
+	m = *res.(*Model)
+
+	// Then the rescan answers with the stale entries still listed.
+	res, _ = m.Update(devicesMsg{devices: []android.Device{
+		usbDevice(), second, netDevice(), offlineNetDevice(),
+	}})
+	m = *res.(*Model)
+
+	for _, d := range m.devices {
+		if d.TCP() {
+			t.Errorf("a network device survived the disconnect: %+v", d)
+		}
+	}
+	if len(m.devices) != 2 {
+		t.Fatalf("expected the two USB devices, got %+v", m.devices)
+	}
+
+	// The prune is one shot: a later wireless device may legitimately appear.
+	res, _ = m.Update(devicesMsg{devices: []android.Device{
+		usbDevice(), second, netDevice(),
+	}})
+	m = *res.(*Model)
+	if len(m.devices) != 3 {
+		t.Errorf("the prune leaked into a later scan: %+v", m.devices)
+	}
+}
+
+func TestConnectDoesNotPrune(t *testing.T) {
+	m := testModel(t, i18n.RU)
+	m.screen = screenDevices
+
+	res, _ := m.Update(tcpMsg{key: "dev.tcp.ok", args: []any{"10.0.0.5:5555"}})
+	m = *res.(*Model)
+	res, _ = m.Update(devicesMsg{devices: []android.Device{usbDevice(), netDevice()}})
+	m = *res.(*Model)
+
+	if len(m.devices) != 2 {
+		t.Errorf("a connect removed a device: %+v", m.devices)
+	}
+}
+
+func TestDisconnectClearsANetworkSelection(t *testing.T) {
+	m := testModel(t, i18n.RU)
+	m.screen = screenDevices
+	m.haveDev = true
+	m.device = netDevice()
+	m.devices = []android.Device{netDevice()}
+
+	res, _ := m.Update(tcpMsg{key: "dev.tcp.done", dropNetwork: true})
+	m = *res.(*Model)
+
+	if m.haveDev {
+		t.Errorf("the disconnected device stayed selected: %+v", m.device)
+	}
+}
+
+func TestDropNetworkDevicesKeepsOrder(t *testing.T) {
+	in := []android.Device{{Serial: "A", Transport: "tcp"},
+		{Serial: "B", Transport: "usb"},
+		{Serial: "C", Transport: "tcp"},
+		{Serial: "D", Transport: "usb"}}
+	got := dropNetworkDevices(in)
+	if len(got) != 2 || got[0].Serial != "B" || got[1].Serial != "D" {
+		t.Errorf("dropNetworkDevices = %+v", got)
+	}
+	if len(dropNetworkDevices(nil)) != 0 {
+		t.Error("dropNetworkDevices(nil) should stay empty")
+	}
+}
+
+// TestDisconnectKeepsTheUserOnTheList: dropping a phone must not walk the user
+// into the menu of whatever happens to be left.
+func TestDisconnectKeepsTheUserOnTheList(t *testing.T) {
+	m := testModel(t, i18n.RU)
+	m.screen = screenDevices
+	m.devices = []android.Device{usbDevice(), offlineNetDevice()}
+
+	res, _ := m.Update(tcpMsg{key: "dev.tcp.done", dropNetwork: true})
+	m = *res.(*Model)
+	// The rescan answers with the single USB device plus the stale entry.
+	res, _ = m.Update(devicesMsg{devices: []android.Device{usbDevice(), offlineNetDevice()}})
+	m = *res.(*Model)
+
+	if m.screen != screenDevices {
+		t.Errorf("after a disconnect the screen is %d, want the device list", m.screen)
+	}
+	if m.haveDev {
+		t.Error("a device was selected without asking after a disconnect")
+	}
+	if len(m.devices) != 1 {
+		t.Errorf("the network device was not dropped: %+v", m.devices)
+	}
+
+	// A later ordinary scan is free to auto select again.
+	res, _ = m.Update(devicesMsg{devices: []android.Device{usbDevice()}})
+	m = *res.(*Model)
+	if m.screen != screenMenu {
+		t.Errorf("the next ordinary scan did not auto select: screen=%d", m.screen)
+	}
+}

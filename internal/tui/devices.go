@@ -61,6 +61,18 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanning = false
 		m.scanErr = msg.err
 
+		// A disconnect that is still settling must keep its verdict on the
+		// fresh list too.
+		pruning := m.pruneNetwork
+		if pruning {
+			msg.devices = dropNetworkDevices(msg.devices)
+			m.pruneNetwork = false
+			if m.haveDev && m.device.TCP() {
+				m.haveDev = false
+				m.device = android.Device{}
+			}
+		}
+
 		// Keep the current selection across a rescan when the device is
 		// still present, so a refresh does not lose the user's place.
 		prev := ""
@@ -81,7 +93,11 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the network is never picked automatically, even on its own: the
 		// cable phone may still be about to appear, and silently choosing the
 		// wireless one is how the wrong handset gets flashed.
-		if len(m.devices) == 1 && !m.devices[0].TCP() {
+		//
+		// A disconnect is a list operation, so it never auto selects either;
+		// otherwise dropping a phone would drop the user straight into the
+		// menu of whatever is left.
+		if !pruning && len(m.devices) == 1 && !m.devices[0].TCP() {
 			m.devIdx = 0
 			m.enrichAndSelect(0)
 			return m, nil
@@ -95,6 +111,20 @@ func (m *Model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanning = false
 		m.tcpBusy = false
 		m.notice = i18nT(msg.key, msg.args...)
+		if msg.dropNetwork {
+			// Drop them at once so the list is not shown with the device
+			// still on it while the rescan is in flight, and again once the
+			// rescan answers.
+			m.pruneNetwork = true
+			m.devices = dropNetworkDevices(m.devices)
+			if m.devIdx >= len(m.devices) {
+				m.devIdx = 0
+			}
+			if m.haveDev && m.device.TCP() {
+				m.haveDev = false
+				m.device = android.Device{}
+			}
+		}
 		// The device list is stale the moment it joins, so refresh it.
 		return m, m.scanDevices()
 
@@ -419,7 +449,7 @@ func disconnectTCP() tea.Cmd {
 		for _, r := range android.DisconnectTCP(ctx) {
 			_ = r
 		}
-		return tcpMsg{key: "dev.tcp.done", args: nil}
+		return tcpMsg{key: "dev.tcp.done", args: nil, dropNetwork: true}
 	}
 }
 
@@ -427,6 +457,24 @@ func disconnectTCP() tea.Cmd {
 type tcpMsg struct {
 	key  string
 	args []any
+	// dropNetwork marks an explicit disconnect, after which no device reached
+	// over the network should be shown.
+	dropNetwork bool
+}
+
+// dropNetworkDevices removes every device reached over the network. adb keeps a
+// disconnected phone in its transport list as "offline" for a while, so a
+// rescan right after "disconnect" would otherwise hand the user back the
+// device they just asked to drop.
+func dropNetworkDevices(devices []android.Device) []android.Device {
+	out := make([]android.Device, 0, len(devices))
+	for _, d := range devices {
+		if d.TCP() {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 func (m Model) viewDevices() string {

@@ -145,7 +145,9 @@ type Model struct {
 	tcpMenu int
 	tcpHost string
 	tcpBusy bool
-	_       struct{}
+	// pruneNetwork keeps an explicit disconnect applied to the next rescan.
+	pruneNetwork bool
+	_            struct{}
 
 	// menu
 	cats   []string
