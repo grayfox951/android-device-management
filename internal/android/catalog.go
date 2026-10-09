@@ -764,5 +764,45 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// --------------------------------------------------------------- other
+	c = append(c,
+		Command{
+			ID: "screenshot", Category: CatOther, Mode: ModeADB,
+			Label: "exec-out screencap -p > <file>", DescKey: "d.screenshot",
+			Args:     []Arg{file("out")},
+			Redirect: "out",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("exec-out", "screencap", "-p")
+			},
+		},
+		Command{
+			ID: "screenrecord", Category: CatOther, Mode: ModeADB,
+			Label: "exec-out screenrecord > <file>", DescKey: "d.screenrecord",
+			Args:     []Arg{file("out"), txt("seconds", "seconds", "10")},
+			Redirect: "out",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("exec-out", "screenrecord", "--time-limit", v["seconds"])
+			},
+		},
+		Command{
+			ID: "server.restart", Category: CatOther, Mode: ModeADB, Label: "adb kill-server && start-server",
+			DescKey: "d.server.restart",
+			// Both halves have to run, so this one goes through a shell; the
+			// daemon is global, so no -s selector is needed.
+			Shell: true,
+			Build: func(d Device, v map[string]string) []string {
+				return []string{"sh", "-c", "adb kill-server; sleep 1; adb start-server"}
+			},
+		},
+		scriptCommand(ModeADB),
+		Command{
+			ID: "server.kill", Category: CatOther, Mode: ModeADB, Label: "adb kill-server",
+			DescKey: "d.server.kill",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("kill-server")
+			},
+		},
+	)
+
 	return c
 }
