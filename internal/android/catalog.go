@@ -218,5 +218,91 @@ func AdbCommands() []Command {
 		},
 	)
 
+	// --------------------------------------------------------------- files
+	c = append(c,
+		Command{
+			ID: "push", Category: CatFiles, Mode: ModeADB, Label: "push <file> <device path>",
+			DescKey: "d.push",
+			Args:    []Arg{file("local"), remote("remote")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("push", v["local"], v["remote"])
+			},
+		},
+		Command{
+			ID: "pull", Category: CatFiles, Mode: ModeADB, Label: "pull <device path> [folder]",
+			DescKey: "d.pull",
+			Args:    []Arg{remote("remote"), dir("local")},
+			Build: func(d Device, v map[string]string) []string {
+				if v["local"] == "" {
+					return d.ADB("pull", v["remote"])
+				}
+				return d.ADB("pull", v["remote"], v["local"])
+			},
+		},
+		Command{
+			ID: "ls", Category: CatFiles, Mode: ModeADB, Label: "shell ls -la <path>",
+			DescKey: "d.ls",
+			Args:    []Arg{remote("path")},
+			Build: func(d Device, v map[string]string) []string {
+				p := v["path"]
+				if p == "" {
+					p = "/sdcard"
+				}
+				return d.ADB("shell", "ls", "-la", p)
+			},
+		},
+		Command{
+			ID: "du", Category: CatFiles, Mode: ModeADB, Label: "shell du -h <path>",
+			DescKey: "d.du",
+			Args:    []Arg{remote("path")},
+			Build: func(d Device, v map[string]string) []string {
+				p := v["path"]
+				if p == "" {
+					p = "/sdcard"
+				}
+				return d.ADB("shell", "du", "-h", p)
+			},
+		},
+		Command{
+			ID: "mkdir", Category: CatFiles, Mode: ModeADB, Label: "shell mkdir -p <path>",
+			DescKey: "d.mkdir",
+			Args:    []Arg{remote("path")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "mkdir", "-p", v["path"])
+			},
+		},
+		Command{
+			ID: "rm", Category: CatFiles, Mode: ModeADB, Label: "shell rm -rf <path>", Risk: true,
+			DescKey: "d.rm",
+			Args:    []Arg{remote("path")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "rm", "-rf", v["path"])
+			},
+		},
+		Command{
+			ID: "cat", Category: CatFiles, Mode: ModeADB, Label: "shell cat <file>",
+			DescKey: "d.cat",
+			Args:    []Arg{remote("path")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "cat", v["path"])
+			},
+		},
+		Command{
+			ID: "stat", Category: CatFiles, Mode: ModeADB, Label: "shell ls -ld <path>",
+			DescKey: "d.stat",
+			Args:    []Arg{remote("path")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "ls", "-ld", v["path"])
+			},
+		},
+		Command{
+			ID: "storage.info", Category: CatFiles, Mode: ModeADB,
+			Label: "df / mounts / sdcard", DescKey: "d.storage.info",
+			Build: func(d Device, v map[string]string) []string {
+				return d.ADB("shell", "sh", "-c", "df -h; echo; mount | grep -E 'sdcard|fuse|emulated'; echo; ls -la /sdcard")
+			},
+		},
+	)
+
 	return c
 }
