@@ -806,3 +806,231 @@ func AdbCommands() []Command {
 
 	return c
 }
+
+// FastbootCommands is the catalog of everything reachable through fastboot.
+func FastbootCommands() []Command {
+	var c []Command
+
+	c = append(c,
+		Command{
+			ID: "fb.devices", Category: CatInfo, Mode: ModeFastboot, Label: "fastboot devices",
+			DescKey: "d.fb.devices",
+			Build: func(d Device, v map[string]string) []string {
+				return []string{"fastboot", "devices"}
+			},
+		},
+		Command{
+			ID: "fb.getvar.all", Category: CatInfo, Mode: ModeFastboot, Label: "fastboot getvar all",
+			DescKey: "d.fb.getvar.all",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("getvar", "all")
+			},
+		},
+		Command{
+			ID: "fb.getvar", Category: CatInfo, Mode: ModeFastboot, Label: "fastboot getvar <name>",
+			DescKey: "d.fb.getvar",
+			Args: []Arg{choice("name", "name", "unlocked",
+				shellCmds("unlocked", "current-unlocked", "secure", "is-userspace", "slot-count", "current-slot", "product", "variant", "version-bootloader", "version-baseband", "hw-revision", "serialno", "has-slot")...)},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("getvar", v["name"])
+			},
+		},
+		Command{
+			ID: "fb.unlock.ability", Category: CatInfo, Mode: ModeFastboot,
+			Label: "fastboot flashing get_unlock_ability", DescKey: "d.fb.unlock.ability",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flashing", "get_unlock_ability")
+			},
+		},
+	)
+
+	// ------------------------------------------------------------ flashing
+	c = append(c,
+		Command{
+			ID: "fb.flash", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot flash <partition> <file>", DescKey: "d.fb.flash",
+			Args: []Arg{part("partition"), file("image")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flash", v["partition"], v["image"])
+			},
+		},
+		Command{
+			ID: "fb.flash.all", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot flash --all <file>", DescKey: "d.fb.flash.all",
+			Args: []Arg{file("image")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flash", "--all", v["image"])
+			},
+		},
+		Command{
+			ID: "fb.erase", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot erase <partition>", DescKey: "d.fb.erase",
+			Args: []Arg{part("partition")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("erase", v["partition"])
+			},
+		},
+		Command{
+			ID: "fb.format", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot format <partition> [fs]", DescKey: "d.fb.format",
+			Args: []Arg{part("partition"), choice("fs", "filesystem", "", shellCmds("", "ext4", "f2fs", "erase", "flash")...)},
+			Build: func(d Device, v map[string]string) []string {
+				if v["fs"] == "" {
+					return d.Fastboot("format", v["partition"])
+				}
+				return d.Fastboot("format", v["fs"], v["partition"])
+			},
+		},
+		Command{
+			ID: "fb.set.active", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked,
+			Label: "fastboot set_active <slot>", DescKey: "d.fb.set.active",
+			Args: []Arg{choice("slot", "slot", "a", ChoiceOpt{Value: "a", Label: "a"}, ChoiceOpt{Value: "b", Label: "b"})},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("set_active", v["slot"])
+			},
+		},
+		Command{
+			ID: "fb.boot", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked,
+			Label: "fastboot boot <kernel image>", DescKey: "d.fb.boot",
+			Args: []Arg{file("image")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("boot", v["image"])
+			},
+		},
+		Command{
+			ID: "fb.oem", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot oem <command>", DescKey: "d.fb.oem",
+			Args: []Arg{txt("cmd", "oem command", "")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("oem", v["cmd"])
+			},
+		},
+		Command{
+			ID: "fb.reboot.edl", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot reboot-edl", DescKey: "d.fb.reboot.edl",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("reboot-edl")
+			},
+		},
+		Command{
+			ID: "fb.flash.sparse", Category: CatFlash, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot flash -S <size> <part> <file>", DescKey: "d.fb.flash.sparse",
+			Args: []Arg{part("partition"), file("image"), txt("size", "size (bytes)", "0")},
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flash", "-S", v["size"], v["partition"], v["image"])
+			},
+		},
+	)
+
+	// ---------------------------------------------------------------- boot
+	c = append(c,
+		Command{
+			ID: "fb.unlock", Category: CatBoot, Mode: ModeFastboot,
+			Label: "fastboot flashing unlock", DescKey: "d.fb.unlock",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flashing", "unlock")
+			},
+		},
+		Command{
+			ID: "fb.unlock.force", Category: CatBoot, Mode: ModeFastboot, Risk: true,
+			Label: "fastboot flashing unlock_force", DescKey: "d.fb.unlock.force",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flashing", "unlock_force")
+			},
+		},
+		Command{
+			ID: "fb.oem.unlock", Category: CatBoot, Mode: ModeFastboot,
+			Label: "fastboot oem unlock", DescKey: "d.fb.oem.unlock",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("oem", "unlock")
+			},
+		},
+		Command{
+			ID: "fb.lock", Category: CatBoot, Mode: ModeFastboot, Gate: GateUnlocked, Risk: true,
+			Label: "fastboot flashing lock", DescKey: "d.fb.lock",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flashing", "lock")
+			},
+		},
+		Command{
+			ID: "fb.secure", Category: CatBoot, Mode: ModeFastboot, Gate: GateUnlocked,
+			Label: "fastboot flashing secure", DescKey: "d.fb.secure",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("flashing", "secure")
+			},
+		},
+		Command{
+			ID: "fb.reboot", Category: CatBoot, Mode: ModeFastboot, Label: "fastboot reboot",
+			DescKey: "d.fb.reboot",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("reboot")
+			},
+		},
+		Command{
+			ID: "fb.reboot.bootloader", Category: CatBoot, Mode: ModeFastboot, Label: "fastboot reboot-bootloader",
+			DescKey: "d.fb.reboot.bootloader",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("reboot-bootloader")
+			},
+		},
+		Command{
+			ID: "fb.reboot.fastboot", Category: CatBoot, Mode: ModeFastboot, Label: "fastboot reboot-fastboot",
+			DescKey: "d.fb.reboot.fastboot",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("reboot-fastboot")
+			},
+		},
+		Command{
+			ID: "fb.reboot.recovery", Category: CatBoot, Mode: ModeFastboot, Label: "fastboot reboot recovery",
+			DescKey: "d.fb.reboot.recovery",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("reboot", "recovery")
+			},
+		},
+		scriptCommand(ModeFastboot),
+		Command{
+			ID: "fb.continue", Category: CatBoot, Mode: ModeFastboot, Label: "fastboot continue",
+			DescKey: "d.fb.continue",
+			Build: func(d Device, v map[string]string) []string {
+				return d.Fastboot("continue")
+			},
+		},
+	)
+
+	return c
+}
+
+// Categories lists the menu sections in display order for a given mode.
+func Categories(mode Mode) []string {
+	if mode == ModeFastboot {
+		return []string{CatInfo, CatFlash, CatBoot, CatOther}
+	}
+	return []string{
+		CatInfo, CatFiles, CatApps, CatBoot,
+		CatRecovery, CatSystem, CatNetwork, CatDebug, CatOther,
+	}
+}
+
+// Catalog returns every command for a mode.
+func Catalog(mode Mode) []Command {
+	if mode == ModeFastboot {
+		return FastbootCommands()
+	}
+	return AdbCommands()
+}
+
+// ByCategory groups the catalog for a mode, skipping empty sections.
+func ByCategory(mode Mode) ([]string, map[string][]Command) {
+	cmds := Catalog(mode)
+	grouped := map[string][]Command{}
+	for _, c := range cmds {
+		grouped[c.Category] = append(grouped[c.Category], c)
+	}
+	var order []string
+	for _, cat := range Categories(mode) {
+		if len(grouped[cat]) > 0 {
+			order = append(order, cat)
+		}
+	}
+	return order, grouped
+}
